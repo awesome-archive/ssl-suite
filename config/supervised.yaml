@@ -1,12 +1,13 @@
 defaults:
-  - data: cifar10
   - optim: adam
 
 model:
-  coef_iters: 400
-  coef_max: 10
-  beta: 0.75
   ema_rate: 0.999
+
+data:
+  name: cifar10
+  train_size: 50000
+  batch_size: 64
 
 optim:
   wd: 0.02

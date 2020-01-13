@@ -1,4 +1,3 @@
-import random
 import shutil
 from copy import deepcopy
 from pathlib import Path
@@ -16,6 +15,7 @@ logger = get_logger(__file__)
 
 
 class TinyImageNet(ImageFolder):
+    # tiny imagenet dataset
 
     def __init__(self, root, train=True, transform=None, target_transform=None, download=False):
         root = Path(root).expanduser()
@@ -60,32 +60,6 @@ def getitem(self, index):
         return self.transform(img), target
 
 
-class SubsetCIFAR10(CIFAR10):
-    CLASSES = {}
-
-    def __init__(self,
-                 root,
-                 train=True,
-                 transform=None,
-                 target_transform=None,
-                 download=False):
-        super(SubsetCIFAR10, self).__init__(root, train, transform, target_transform, download)
-
-    def make_subset(self):
-        indices = [i for i in range(len(self)) if self.targets[i] in self.CLASSES]
-        self.data = [self.data[i] for i in indices]
-        self.targets = [self.targets for i in indices]
-        return self
-
-
-class AnimalCIFAR10(SubsetCIFAR10):
-    CLASSES = {2, 3, 4, 5, 6, 7}
-
-
-class NonAnimalCIFAR10(SubsetCIFAR10):
-    CLASSES = {0, 1, 8, 9}
-
-
 class OriginalSVHN(SVHN):
     def __init__(self,
                  root,
@@ -93,7 +67,7 @@ class OriginalSVHN(SVHN):
                  transform=None,
                  target_transform=None,
                  download=False):
-        super(OriginalSVHN, self).__init__(root, split="train" if train else "val", transform=transform,
+        super(OriginalSVHN, self).__init__(root, split="train" if train else "test", transform=transform,
                                            target_transform=target_transform, download=download)
         self.data = [Image.fromarray(np.transpose(img, (1, 2, 0))) for img in self.data]
         self.targets = self.labels
@@ -116,7 +90,7 @@ def get_dataloader(dataset: str,
                                 sampler=RandomSampler(labeled_set, True, labeled_size),
                                 num_workers=2, pin_memory=True)
     unlabeled_loader = DataLoader(unlabeled_set, batch_size=batch_size,
-                                  sampler=RandomSampler(unlabeled_set, True, unlabeled_size),
+                                  sampler=RandomSampler(unlabeled_set, True, 64 * 1024),
                                   num_workers=2, pin_memory=True)
     val_loader = DataLoader(val_set, batch_size=2 * batch_size, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=2 * batch_size)
@@ -129,6 +103,29 @@ def get_dataloader(dataset: str,
     return labeled_loader, unlabeled_loader, val_loader, test_loader
 
 
+DATASETS = {"cifar10": (CIFAR10, "~/.torch/data/cifar10",
+                        [transforms.ToTensor(),
+                         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))],
+                        [transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+                         transforms.RandomHorizontalFlip()], 10),
+            "cifar100": (CIFAR100, "~/.torch/data/cifar100",
+                         [transforms.ToTensor(),
+                          transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))],
+                         [transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+                          transforms.RandomHorizontalFlip()], 100),
+            "svhn": (OriginalSVHN, "~/.torch/data/svhn",
+                     [transforms.ToTensor(),
+                      transforms.Normalize((0.4390, 0.4443, 0.4692), (0.1189, 0.1222, 0.1049))],
+                     [transforms.RandomCrop(32, padding=4, padding_mode='reflect')], 10),
+            "tinyimagenet": (TinyImageNet, "~/.torch/data/tinyimagenet",
+                             [transforms.ToTensor(),
+                              transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))],
+                             [transforms.Resize(40),
+                              transforms.RandomCrop(32),
+                              transforms.RandomHorizontalFlip()], 200)
+            }
+
+
 def _get_dataset(dataset: str,
                  labeled_size: int,
                  unlabeled_size: int,
@@ -136,30 +133,8 @@ def _get_dataset(dataset: str,
                  download: bool,
                  balanced: bool,
                  pilaugment: bool = False) -> (VisionDataset, VisionDataset, VisionDataset, VisionDataset):
-    datasets = {"cifar10": (CIFAR10, "~/.torch/data/cifar10",
-                            [transforms.ToTensor(),
-                             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))],
-                            [transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
-                             transforms.RandomHorizontalFlip()], 10),
-                "cifar100": (CIFAR100, "~/.torch/data/cifar100",
-                             [transforms.ToTensor(),
-                              transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))],
-                             [transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
-                              transforms.RandomHorizontalFlip()], 100),
-                "svhn": (OriginalSVHN, "~/.torch/data/svhn",
-                         [transforms.ToTensor(),
-                          transforms.Normalize((0.4390, 0.4443, 0.4692), (0.1189, 0.1222, 0.1049))],
-                         [transforms.RandomCrop(32, padding=4, padding_mode='reflect')], 10),
-                "tinyimagenet": (TinyImageNet, "~/.torch/data/tinyimagenet",
-                                 [transforms.ToTensor(),
-                                  transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))],
-                                 [transforms.Resize(40),
-                                  transforms.RandomCrop(32),
-                                  transforms.RandomHorizontalFlip()], 200)
-                }
-
-    if dataset in datasets.keys():
-        dset, root, norm_transform, data_aug, num_cls = datasets.get(dataset, datasets["cifar10"])
+    if dataset in DATASETS.keys():
+        dset, root, norm_transform, data_aug, num_cls = DATASETS.get(dataset, DATASETS["cifar10"])
         labeled_set = dset(root, train=True, transform=transforms.Compose(data_aug + norm_transform), download=download)
         test_set = dset(root, train=False, transform=transforms.Compose(norm_transform), download=download)
         labeled_set, unlabeled_set, val_set = _split_dataset(labeled_set, labeled_size, unlabeled_size, val_size,
@@ -181,19 +156,6 @@ def _get_dataset(dataset: str,
     return labeled_set, unlabeled_set, val_set, test_set
 
 
-def _balanced_shuffle(self: VisionDataset,
-                      num_classes: int):
-    # utility to make balanced labeled data
-    cls_to_idx = {i: [j for j in range(len(self.data)) if self.targets[j] == i] for i in range(num_classes)}
-    for k, v in cls_to_idx.items():
-        cls_to_idx[k] = random.sample(v, k=len(v))
-    indices = sum([list(z) for z in zip(*cls_to_idx.values())],
-                  [])
-    self.data = [self.data[i] for i in indices]
-    self.targets = [self.targets[i] for i in indices]
-    return self
-
-
 def _split_dataset(dataset: VisionDataset,
                    labeled_size: int,
                    unlabeled_size: int,
@@ -203,12 +165,9 @@ def _split_dataset(dataset: VisionDataset,
     # split given dataset into labeled, unlabeled and val
 
     assert labeled_size + unlabeled_size + val_size == len(dataset)
-    if balanced:
-        _balanced_shuffle(dataset, num_classes)
-    else:
-        indices = torch.randperm(len(dataset))
-        dataset.data = [dataset.data[i] for i in indices]
-        dataset.targets = [dataset.targets for i in indices]
+    indices = torch.randperm(len(dataset))
+    dataset.data = [dataset.data[i] for i in indices]
+    dataset.targets = [dataset.targets[i] for i in indices]
 
     labeled_set = dataset
     unlabeled_set = deepcopy(dataset)
@@ -228,6 +187,3 @@ if __name__ == '__main__':
     # download all datasets
 
     _get_dataset('cifar10', 4_000, 41_000, 5_000, download=True, balanced=False)
-    _get_dataset('cifar10+cifar100', 4_000, 41_000, 5_000, download=True, balanced=False)
-    _get_dataset('cifar10+svhn', 4_000, 41_000, 5_000, download=True, balanced=False)
-    _get_dataset('cifar10+tinyimagenet', 4_000, 41_000, 5_000, download=True, balanced=False)

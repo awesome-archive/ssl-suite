@@ -11,6 +11,10 @@ Currently, the following methods are implemented:
 * Pseudo Label
 * Virtual Adversarial Training
 
+## Updates
+
+* 2019/12/25 Update WideResNet compatible with google's implementations
+
 ## Requirements
 
 * Python>=3.7
@@ -31,12 +35,28 @@ If you want to change configurations from the default values, do something like
 
 For configurable values, see files in `config`.
 
-## Benchmarks (on CIFAR-10)
+## Benchmarks
+
+Following Berthelot+2019, the reported accuracy values are median of accuracy of last 20 epochs.
+
+### CIFAR-10
 
 |Number of Labeled images | ICT | Mean Teacher | MixMatch | Pseudo Label | VAT |
 --- | --- | --- | --- | --- | --- |
-4,000 | 0.90 | 0.89 | 0.91 | 0.82 | 0.82|
+4,000 | 0.89 | 0.89 | 0.93 | - | - |
 
+* Supervised learning on 50,000/4,000 images yields accuracy of 0.94/0.82.
+
+### SVHN
+
+`python {ict,mean_teacher,mixmatch,pseudo_label,vat}.py data.name=svhn data.labeled_size=1000 data.unlabeled_size=64931 data.val_size=7326 ${MODEL_SPECIFIC_SETTINGS}`
+
+|Number of Labeled images | ICT | Mean Teacher | MixMatch | Pseudo Label | VAT |
+--- | --- | --- | --- | --- | --- |
+1,000 | 0.91 | 0.96 | 0.94 | - | - |
+
+* Supervised learning on 50,000/4,000 images yields accuracy of 0.97/0.88.
+ 
 ## Citation
 
 
@@ -47,6 +67,6 @@ For configurable values, see files in `config`.
     year = {2019},
     publisher = {GitHub},
     journal = {GitHub repository},
-    howpublished = {\url{https://GitHub.com/moskomule/ssl-suite}},
+    howpublished = {\url{https://github.com/moskomule/ssl-suite}},
 }
 ```
